@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import ApiError from '../../utils/ApiError.js';
 import { generateAccessToken } from '../../utils/jwt.js';
-import { findUserByEmail, createUser } from './auth.repository.js';
+import { findUserByEmail, findUserById, createUser } from './auth.repository.js';
 
 export async function registerUser({ name, email, password }) {
   const existingUser = await findUserByEmail(email);
@@ -52,4 +52,18 @@ export async function loginUser({ email, password }) {
       updated_at: user.updated_at,
     },
   };
+}
+
+export async function getCurrentUser(userId) {
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (!user.is_active) {
+    throw new ApiError(403, 'User account is inactive');
+  }
+
+  return user;
 }

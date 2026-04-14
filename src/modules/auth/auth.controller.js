@@ -1,5 +1,5 @@
 import { registerSchema, loginSchema } from './auth.validation.js';
-import { registerUser, loginUser } from './auth.service.js';
+import { registerUser, loginUser, getCurrentUser } from './auth.service.js';
 import ApiError from '../../utils/ApiError.js';
 
 export async function register(req, res, next) {
@@ -44,9 +44,11 @@ export async function login(req, res, next) {
 
 export async function getMe(req, res, next) {
   try {
+    const user = await getCurrentUser(req.user.id);
+
     res.status(200).json({
       message: 'Authenticated user retrieved successfully',
-      data: req.user,
+      data: user,
     });
   } catch (error) {
     next(error);
