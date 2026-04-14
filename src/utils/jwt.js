@@ -18,3 +18,19 @@ export function generateAccessToken(user) {
 export function verifyAccessToken(token) {
   return jwt.verify(token, env.jwtAccessSecret);
 }
+
+export function generateRefreshToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+    },
+    env.jwtRefreshSecret,
+    {
+      expiresIn: env.jwtRefreshExpiresIn,
+    }
+  );
+}
+
+export function verifyRefreshToken(token) {
+  return jwt.verify(token, env.jwtRefreshSecret);
+}

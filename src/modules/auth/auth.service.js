@@ -1,7 +1,29 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import ApiError from '../../utils/ApiError.js';
-import { generateAccessToken } from '../../utils/jwt.js';
-import { findUserByEmail, findUserById, createUser } from './auth.repository.js';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} from '../../utils/jwt.js';
+import {
+  findUserByEmail,
+  findUserById,
+  createUser,
+  createRefreshToken,
+  findValidRefreshTokenByHash,
+  revokeRefreshTokenByHash,
+} from './auth.repository.js';
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getRefreshExpiryDate() {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+  return expiresAt;
+}
 
 export async function registerUser({ name, email, password }) {
   const existingUser = await findUserByEmail(email);
@@ -39,9 +61,17 @@ export async function loginUser({ email, password }) {
   }
 
   const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  await createRefreshToken({
+    userId: user.id,
+    tokenHash: hashToken(refreshToken),
+    expiresAt: getRefreshExpiryDate(),
+  });
 
   return {
     accessToken,
+    refreshToken,
     user: {
       id: user.id,
       name: user.name,
@@ -66,4 +96,61 @@ export async function getCurrentUser(userId) {
   }
 
   return user;
+}
+
+export async function refreshUserSession(refreshToken) {
+  if (!refreshToken) {
+    throw new ApiError(401, 'Refresh token is required');
+  }
+
+  let decoded;
+
+  try {
+    decoded = verifyRefreshToken(refreshToken);
+  } catch {
+    throw new ApiError(401, 'Invalid or expired refresh token');
+  }
+
+  const tokenHash = hashToken(refreshToken);
+  const savedToken = await findValidRefreshTokenByHash(tokenHash);
+
+  if (!savedToken) {
+    throw new ApiError(401, 'Refresh token is not recognized');
+  }
+
+  const user = await findUserById(decoded.sub);
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (!user.is_active) {
+    throw new ApiError(403, 'User account is inactive');
+  }
+
+  await revokeRefreshTokenByHash(tokenHash);
+
+  const newAccessToken = generateAccessToken(user);
+  const newRefreshToken = generateRefreshToken(user);
+
+  await createRefreshToken({
+    userId: user.id,
+    tokenHash: hashToken(newRefreshToken),
+    expiresAt: getRefreshExpiryDate(),
+  });
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+    user,
+  };
+}
+
+export async function logoutUser(refreshToken) {
+  if (!refreshToken) {
+    return;
+  }
+
+  const tokenHash = hashToken(refreshToken);
+  await revokeRefreshTokenByHash(tokenHash);
 }
