@@ -41,3 +41,14 @@ export async function login(req, res, next) {
     next(error);
   }
 }
+
+export async function getMe(req, res, next) {
+  try {
+    res.status(200).json({
+      message: 'Authenticated user retrieved successfully',
+      data: req.user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
