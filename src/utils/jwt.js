@@ -14,3 +14,7 @@ export function generateAccessToken(user) {
     }
   );
 }
+
+export function verifyAccessToken(token) {
+  return jwt.verify(token, env.jwtAccessSecret);
+}
