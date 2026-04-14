@@ -8,7 +8,6 @@ export async function register(req, res, next) {
 
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0];
-
       throw new ApiError(400, firstIssue.message);
     }
 
