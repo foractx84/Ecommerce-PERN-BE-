@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import ApiError from '../../utils/ApiError.js';
+import { withTransaction } from '../../config/db.js';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -112,38 +113,44 @@ export async function refreshUserSession(refreshToken) {
   }
 
   const tokenHash = hashToken(refreshToken);
-  const savedToken = await findValidRefreshTokenByHash(tokenHash);
 
-  if (!savedToken) {
-    throw new ApiError(401, 'Refresh token is not recognized');
-  }
+  return withTransaction(async (client) => {
+    const savedToken = await findValidRefreshTokenByHash(tokenHash, client);
 
-  const user = await findUserById(decoded.sub);
+    if (!savedToken) {
+      throw new ApiError(401, 'Refresh token is not recognized');
+    }
 
-  if (!user) {
-    throw new ApiError(404, 'User not found');
-  }
+    const user = await findUserById(decoded.sub, client);
 
-  if (!user.is_active) {
-    throw new ApiError(403, 'User account is inactive');
-  }
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
 
-  await revokeRefreshTokenByHash(tokenHash);
+    if (!user.is_active) {
+      throw new ApiError(403, 'User account is inactive');
+    }
 
-  const newAccessToken = generateAccessToken(user);
-  const newRefreshToken = generateRefreshToken(user);
+    await revokeRefreshTokenByHash(tokenHash, client);
 
-  await createRefreshToken({
-    userId: user.id,
-    tokenHash: hashToken(newRefreshToken),
-    expiresAt: getRefreshExpiryDate(),
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    await createRefreshToken(
+      {
+        userId: user.id,
+        tokenHash: hashToken(newRefreshToken),
+        expiresAt: getRefreshExpiryDate(),
+      },
+      client
+    );
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      user,
+    };
   });
-
-  return {
-    accessToken: newAccessToken,
-    refreshToken: newRefreshToken,
-    user,
-  };
 }
 
 export async function logoutUser(refreshToken) {
